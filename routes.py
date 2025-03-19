@@ -11,23 +11,18 @@ import schemas
 # Initialize Router
 router = APIRouter()
 
-# Initialize Jinja2 template engine
-templates = Jinja2Templates(directory="templates")
-
 @router.post("/items/")
-def add_item(name: str = Form(...), description: str = Form(...), db: Session = Depends(get_db)):
-    new_item = models.Items(name=name, description=description)
+def add_item(item: schemas.Items, db: Session = Depends(get_db)):
+    new_item = models.Items(name=item.name, description=item.description)
     db.add(new_item)
     db.commit()
     db.refresh(new_item)
-    print({"message": "Item added successfully!"})
-    return RedirectResponse(url="/items",status_code=HTTP_303_SEE_OTHER)
-
+    return {"message": "Item added successfully!", "item": new_item}
 
 @router.get("/items/")
 def read_root(request: Request, db: Session = Depends(get_db)):
     items = db.query(models.Items).all()
-    return templates.TemplateResponse("index.html", {"request": request, "items": items})
+    return items
 
 
 @router.delete("/delete_all_items/")
@@ -41,10 +36,6 @@ def delete_all_items(db: Session = Depends(get_db)):
 def home(request: Request):
     return templates.TemplateResponse("home.html",{"request": request,})
 
-@router.get("/items_list/")
-def item_list(request: Request, db: Session = Depends(get_db)):
-    items = db.query(models.Items).all()
-    return templates.TemplateResponse("items.html", {"request": request, "items": items})
 
 @router.delete("/delete_item/{item_id}")
 def delete_item(item_id: int, db: Session = Depends(get_db)):
@@ -59,10 +50,20 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
 @router.put("/edit_item/{item_id}")
 def edit_item(item_id: int, item: schemas.Items, db: Session = Depends(get_db)):
     existing_item = db.query(models.Items).filter(models.Items.id == item_id).first()
+    old_item_name  = existing_item.name
     if not existing_item:
         raise HTTPException(status_code=404, detail="Item not found")
 
     existing_item.name = item.name
     existing_item.description = item.description
     db.commit()
-    return {"message": "Item updated successfully"}
+    return {"message": "Item updated successfully", "old_item" : old_item_name,"updated_item":existing_item.name}
+
+@router.get("/search/{name}")
+def search_item(name: str, db: Session = Depends(get_db)):
+    searched_item = db.query(models.Items).filter(models.Items.name == name or models.Items.name == name.capitalize()).all()
+    
+    if not searched_item:
+        return {"message": "Item not found"}
+    
+    return searched_item 
